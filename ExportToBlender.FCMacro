@@ -1,0 +1,121 @@
+# -*- coding: utf-8 -*-
+# FreeCAD2Blender.FCMacro
+# 功能：导出选中对象为 STL 并通知 Blender 导入
+# 用法：Macro → Execute macro → 选择本文件
+# 或：添加到自定义工具栏一键运行
+
+__title__ = "FreeCAD to Blender Export"
+__author__ = "Your Name"
+__version__ = "1.0"
+__date__ = "2026-04-13"
+
+import os
+import sys
+import tempfile
+import json
+import socket
+import FreeCAD
+import FreeCADGui
+import MeshPart
+import Mesh
+
+# ============ 用户配置区域 ============
+BLENDER_HOST = "127.0.0.1"
+BLENDER_PORT = 65432
+LINEAR_DEFLECTION = 0.1  # 网格精度：越小越精细（单位：mm）
+ANGULAR_DEFLECTION = 0.5236  # 角度偏差：0.5236 ≈ 30°
+# =====================================
+
+
+def export_selection_to_blender():
+    """主函数：导出选中对象并通知 Blender"""
+
+    # 获取选中对象
+    selection = FreeCADGui.Selection.getSelection()
+    if not selection:
+        FreeCAD.Console.PrintWarning("⚠️ 请先选择一个或多个对象!\n")
+        return
+
+    FreeCAD.Console.PrintMessage(f"📦 导出选中物体: {selection[0].Label}\n")
+
+    # 准备导出路径
+    temp_dir = tempfile.gettempdir()
+    
+    # 使用选中物体名称作为文件名
+    if len(selection) == 1:
+        export_name = selection[0].Label
+    else:
+        export_name = "freecad_export"
+    filename = f"{export_name}.stl"
+    filepath = os.path.join(temp_dir, filename)
+
+    try:
+        # 转换对象为网格
+        meshes = []
+        for i, obj in enumerate(selection):
+            if not hasattr(obj, "Shape"):
+                FreeCAD.Console.PrintWarning(f"⚠️ 跳过非几何对象: {obj.Label}\n")
+                continue
+
+            try:
+                # 使用 MeshPart 创建网格 [[39]][[41]]
+                mesh = MeshPart.meshFromShape(Shape=obj.Shape, LinearDeflection=LINEAR_DEFLECTION, AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
+                meshes.append(mesh)
+                FreeCAD.Console.PrintMessage(f"  ✓ {obj.Label} → 网格 ({len(mesh.Facets)} 面)\n")
+            except Exception as e:
+                FreeCAD.Console.PrintError(f"  ✗ {obj.Label} 转换失败: {e}\n")
+
+        if not meshes:
+            FreeCAD.Console.PrintError("❌ 没有可导出的网格!\n")
+            return
+
+        # 只导出第一个选中的物体
+        meshes[0].write(filepath)
+        FreeCAD.Console.PrintMessage(f"✅ 导出成功: {filepath}\n")
+
+        # 5️⃣ 通知 Blender 导入
+        notify_blender(filepath)
+
+    except Exception as e:
+        FreeCAD.Console.PrintError(f"❌ 导出过程异常: {e}\n")
+        import traceback
+        FreeCAD.Console.PrintError(traceback.format_exc())
+
+
+def notify_blender(filepath: str):
+    """通过 TCP Socket 通知 Blender 导入文件"""
+
+    message = {
+        "command": "import",
+        "filepath": filepath,
+        "format": "stl",
+        "replace": True  # 可选：是否替换同名对象
+    }
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(3.0)  # 3秒超时
+            s.connect((BLENDER_HOST, BLENDER_PORT))
+            s.sendall(json.dumps(message).encode('utf-8'))
+
+            # 等待响应
+            response = s.recv(1024)
+            if response:
+                FreeCAD.Console.PrintMessage(f"🔗 Blender: {response.decode().strip()}\n")
+            else:
+                FreeCAD.Console.PrintMessage("🔗 Blender 已接收（无响应）\n")
+
+    except ConnectionRefusedError:
+        FreeCAD.Console.PrintWarning("⚠️ 无法连接 Blender!\n"
+                                     f"   请确保 Blender 正在运行并监听 {BLENDER_HOST}:{BLENDER_PORT}\n"
+                                     "   在 Blender Scripting 中运行 blender_ipc_listener.py\n")
+    except socket.timeout:
+        FreeCAD.Console.PrintWarning("⚠️ 连接 Blender 超时，请检查网络或防火墙设置\n")
+    except Exception as e:
+        FreeCAD.Console.PrintWarning(f"⚠️ 通知 Blender 失败: {e}\n")
+
+
+# ============ Macro 入口 ============
+if __name__ == "__main__":
+    # 执行导出
+    export_selection_to_blender()
