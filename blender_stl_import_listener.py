@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "Socket STL Importer",
+    "name": "STL Import Listener",
     "author": "You",
     "version": (1, 0),
     "blender": (3, 0, 0),
@@ -88,40 +88,12 @@ def stop_listener():
     print("[Addon] Socket 监听已停止")
 
 
-class SOCKET_OT_Start(bpy.types.Operator):
-    bl_idname = "socket.start_stl_listener"
-    bl_label = "Start STL Socket Listener"
-
-    def execute(self, context):
-        start_listener()
-        return {"FINISHED"}
-
-
-class SOCKET_OT_Stop(bpy.types.Operator):
-    bl_idname = "socket.stop_stl_listener"
-    bl_label = "Stop STL Socket Listener"
-
-    def execute(self, context):
-        stop_listener()
-        return {"FINISHED"}
-
-
-def menu_func(self, context):
-    self.layout.operator("socket.start_stl_listener")
-    self.layout.operator("socket.stop_stl_listener")
-
-
 def register():
-    bpy.utils.register_class(SOCKET_OT_Start)
-    bpy.utils.register_class(SOCKET_OT_Stop)
-    bpy.types.VIEW3D_MT_object.append(menu_func)
+    start_listener()
 
 
 def unregister():
     stop_listener()
-    bpy.utils.unregister_class(SOCKET_OT_Start)
-    bpy.utils.unregister_class(SOCKET_OT_Stop)
-    bpy.types.VIEW3D_MT_object.remove(menu_func)
 
 
 if __name__ == "__main__":
