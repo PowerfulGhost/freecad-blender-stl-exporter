@@ -4,7 +4,7 @@ bl_info = {
     "version": (1, 0),
     "blender": (3, 0, 0),
     "location": "View3D > Object > Socket STL Importer",
-    "description": "监听 TCP Socket，收到路径后自动导入 STL",
+    "description": "Listen to TCP Socket, automatically import STL after receiving path",
     "category": "Import-Export",
 }
 
@@ -14,15 +14,15 @@ import threading
 import queue
 import os
 
-# 线程安全的消息队列
+# Thread-safe message queue
 stl_queue = queue.Queue()
 listener_thread = None
 is_running = False
-HOST, PORT = "127.0.0.1", 65432  # 监听地址与端口
+HOST, PORT = "127.0.0.1", 65432  # Listen address and port
 
 
 def socket_listener():
-    """后台线程：监听 TCP 连接，解析路径并放入队列"""
+    """Background thread: listen to TCP connections, parse path and put into queue"""
     global is_running
     is_running = True
     import json
@@ -31,8 +31,8 @@ def socket_listener():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen(1)
-        s.settimeout(1.0)  # 超时防止卡死
-        print(f"[Socket] 开始监听 {HOST}:{PORT}")
+        s.settimeout(1.0)  # Timeout to prevent freezing
+        print(f"[Socket] Started listening on {HOST}:{PORT}")
         while is_running:
             try:
                 conn, addr = s.accept()
@@ -42,16 +42,16 @@ def socket_listener():
                         msg = json.loads(raw_msg)
                         filepath = msg["filepath"]
                         stl_queue.put(filepath)
-                        print(f"[Socket] 收到路径: {filepath}")
+                        print(f"[Socket] Received path: {filepath}")
             except socket.timeout:
                 continue
             except Exception as e:
                 if is_running:
-                    print(f"[Socket] 错误: {e}")
+                    print(f"[Socket] Error: {e}")
 
 
 def import_stl_timer():
-    """主线程定时器：检查队列并导入 STL"""
+    """Main thread timer: check queue and import STL"""
     while not stl_queue.empty():
         try:
             filepath = stl_queue.get_nowait()
@@ -77,12 +77,12 @@ def import_stl_timer():
                     new_obj.location = old_transform[0]
                     new_obj.rotation_euler = old_transform[1]
 
-                print(f"[Import] 成功导入: {filepath}")
+                print(f"[Import] Successfully imported: {filepath}")
             else:
-                print(f"[Import] 路径无效或非 STL: {filepath}")
+                print(f"[Import] Invalid path or not STL: {filepath}")
         except queue.Empty:
             break
-    return 0.5  # 0.5秒后再次执行
+    return 0.5  # Run again after 0.5 seconds
 
 
 def start_listener():
@@ -91,7 +91,7 @@ def start_listener():
         listener_thread = threading.Thread(target=socket_listener, daemon=True)
         listener_thread.start()
         bpy.app.timers.register(import_stl_timer)
-        print("[Addon] Socket 监听已启动")
+        print("[Addon] Socket listener started")
 
 
 def stop_listener():
@@ -100,8 +100,8 @@ def stop_listener():
     try:
         bpy.app.timers.unregister(import_stl_timer)
     except ValueError:
-        pass  # 定时器未注册时忽略
-    print("[Addon] Socket 监听已停止")
+        pass  # Ignore when timer is not registered
+    print("[Addon] Socket listener stopped")
 
 
 def register():

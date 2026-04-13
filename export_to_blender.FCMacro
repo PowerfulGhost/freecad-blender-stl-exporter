@@ -1,0 +1,121 @@
+# -*- coding: utf-8 -*-
+# FreeCAD2Blender.FCMacro
+# Function: Export selected objects to STL and notify Blender to import
+# Usage: Macro -> Execute macro -> select this file
+# Or: Add to custom toolbar for one-click run
+
+__title__ = "FreeCAD to Blender Export"
+__author__ = "Your Name"
+__version__ = "1.0"
+__date__ = "2026-04-13"
+
+import os
+import sys
+import tempfile
+import json
+import socket
+import FreeCAD
+import FreeCADGui
+import MeshPart
+import Mesh
+
+# ============ User Configuration Area ============
+BLENDER_HOST = "127.0.0.1"
+BLENDER_PORT = 65432
+LINEAR_DEFLECTION = 0.1  # Mesh precision: smaller = finer (unit: mm)
+ANGULAR_DEFLECTION = 0.5236  # Angular deflection: 0.5236 = 30 deg
+# ================================================
+
+
+def export_selection_to_blender():
+    """Main function: export selected objects and notify Blender"""
+
+    # Get selected objects
+    selection = FreeCADGui.Selection.getSelection()
+    if not selection:
+        FreeCAD.Console.PrintWarning("Please select one or more objects first!\n")
+        return
+
+    FreeCAD.Console.PrintMessage(f"Exporting selected object: {selection[0].Label}\n")
+
+    # Prepare export path
+    temp_dir = tempfile.gettempdir()
+    
+    # Use selected object name as filename
+    if len(selection) == 1:
+        export_name = selection[0].Label
+    else:
+        export_name = "freecad_export"
+    filename = f"{export_name}.stl"
+    filepath = os.path.join(temp_dir, filename)
+
+    try:
+        # Convert object to mesh
+        meshes = []
+        for i, obj in enumerate(selection):
+            if not hasattr(obj, "Shape"):
+                FreeCAD.Console.PrintWarning(f"Skipping non-geometric object: {obj.Label}\n")
+                continue
+
+            try:
+                # Use MeshPart to create mesh
+                mesh = MeshPart.meshFromShape(Shape=obj.Shape, LinearDeflection=LINEAR_DEFLECTION, AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
+                meshes.append(mesh)
+                FreeCAD.Console.PrintMessage(f"  Converted {obj.Label} to mesh ({len(mesh.Facets)} facets)\n")
+            except Exception as e:
+                FreeCAD.Console.PrintError(f"  Failed to convert {obj.Label}: {e}\n")
+
+        if not meshes:
+            FreeCAD.Console.PrintError("No mesh available to export!\n")
+            return
+
+        # Only export the first selected object
+        meshes[0].write(filepath)
+        FreeCAD.Console.PrintMessage(f"Export successful: {filepath}\n")
+
+        # Notify Blender to import
+        notify_blender(filepath)
+
+    except Exception as e:
+        FreeCAD.Console.PrintError(f"Export process exception: {e}\n")
+        import traceback
+        FreeCAD.Console.PrintError(traceback.format_exc())
+
+
+def notify_blender(filepath: str):
+    """Notify Blender to import file via TCP Socket"""
+
+    message = {
+        "command": "import",
+        "filepath": filepath,
+        "format": "stl",
+        "replace": True  # Optional: whether to replace objects with the same name
+    }
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(3.0)  # 3 second timeout
+            s.connect((BLENDER_HOST, BLENDER_PORT))
+            s.sendall(json.dumps(message).encode('utf-8'))
+
+            # Wait for response
+            response = s.recv(1024)
+            if response:
+                FreeCAD.Console.PrintMessage(f"Blender: {response.decode().strip()}\n")
+            else:
+                FreeCAD.Console.PrintMessage("Blender received (no response)\n")
+
+    except ConnectionRefusedError:
+        FreeCAD.Console.PrintWarning("Cannot connect to Blender!\n"
+                                     f"   Make sure Blender is running and listening on {BLENDER_HOST}:{BLENDER_PORT}\n"
+                                     "   Run blender_ipc_listener.py in Blender Scripting\n")
+    except socket.timeout:
+        FreeCAD.Console.PrintWarning("Connection to Blender timed out, please check network or firewall settings\n")
+    except Exception as e:
+        FreeCAD.Console.PrintWarning(f"Failed to notify Blender: {e}\n")
+
+
+# ============ Macro Entry Point ============
+if __name__ == "__main__":
+    # Execute export
+    export_selection_to_blender()
