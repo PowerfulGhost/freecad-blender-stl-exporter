@@ -56,11 +56,27 @@ def import_stl_timer():
         try:
             filepath = stl_queue.get_nowait()
             if os.path.isfile(filepath) and filepath.lower().endswith(".stl"):
-                # 兼容 Blender 4.2+ 新 API 与旧版 API
+                obj_name = os.path.splitext(os.path.basename(filepath))[0]
+                old_obj = bpy.data.objects.get(obj_name)
+                old_transform = (
+                    (old_obj.location.copy(), old_obj.rotation_euler.copy())
+                    if old_obj
+                    else None
+                )
+
+                if old_obj:
+                    bpy.data.objects.remove(old_obj, do_unlink=True)
+
                 try:
                     bpy.ops.wm.stl_import(filepath=filepath)
                 except AttributeError:
                     bpy.ops.import_mesh.stl(filepath=filepath)
+
+                new_obj = bpy.data.objects.get(obj_name)
+                if new_obj and old_transform:
+                    new_obj.location = old_transform[0]
+                    new_obj.rotation_euler = old_transform[1]
+
                 print(f"[Import] 成功导入: {filepath}")
             else:
                 print(f"[Import] 路径无效或非 STL: {filepath}")
