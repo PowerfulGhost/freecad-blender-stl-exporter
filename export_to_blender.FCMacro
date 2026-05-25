@@ -22,8 +22,8 @@ import Mesh
 # ============ User Configuration Area ============
 BLENDER_HOST = "127.0.0.1"
 BLENDER_PORT = 65432
-LINEAR_DEFLECTION = 0.1  # Mesh precision: smaller = finer (unit: mm)
-ANGULAR_DEFLECTION = 0.5236  # Angular deflection: 0.5236 = 30 deg
+LINEAR_DEFLECTION = 0.05  # Mesh precision: smaller = finer (unit: mm)
+ANGULAR_DEFLECTION = 0.01745  # Angular deflection: 0.01745 = 1 deg
 # ================================================
 
 
